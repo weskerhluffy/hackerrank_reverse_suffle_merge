@@ -5,6 +5,8 @@ Created on 18 ago 2019
 @author: ernestoalvarado
 '''
 
+# XXX: https://www.hackerrank.com/challenges/reverse-shuffle-merge/problem
+
 import math
 import os
 import random
@@ -80,6 +82,7 @@ class Intervalo:
         self.posiciones = posiciones
         self.indice_posicion_inicial = indice_posicion_inicial
         self.indice_posicion_final = indice_posicion_final
+        self.restantes = {}
 
 
 # Complete the reverseShuffleMerge function below.
@@ -95,47 +98,42 @@ def reverseShuffleMerge(s):
         histograma[c] >>= 1
         
     rmq = RMQ(s_len)
-    for i, c in enumerate(s):
+    i = s_len - 1
+    while i >= 0:
+        c = s[i]
         intervalo = intervalos[indices_alfabeto[c]]
         if intervalo:
             intervalo.posiciones.append(i)
+            intervalo.restantes[i] = len(intervalo.posiciones)
         rmq.update(i, c)
+        i -= 1
     
     histograma1 = {}
     i = s_len - 1
     while i >= 0 and (not histograma1 or not all(map(lambda c:c in histograma1 and histograma1[c] == histograma[c], histograma))):
         c = s[i]
-        histograma1[c] = min(histograma1.setdefault(c, 0) + 1, histograma[c])
+        conteo = histograma1.setdefault(c, 0) 
+        if (conteo + 1) <= histograma[c]:
+            histograma1[c] = conteo + 1
+#        histograma1[c] = min(conteo+ 1, histograma[c])
         i -= 1
     j = i
     i = 0
-    while any(histograma.values()) and i < j:
+    while any(histograma.values()):
         c = rmq.query(i, j)
         while i < s_len and s[i] != c:
             i += 1
         i = min(s_len - 1, i + 1)
 #        j = min(s_len - 1, j + 1)
         histograma[c] = max(0, histograma[c] - 1)
-#        print("i {} j {} c {}". format(i, j, c))
+        print("i {} j {} c {}". format(i, j, c))
         if not histograma[c]:
             for k in intervalos[indices_alfabeto[c]].posiciones:
                 s[k] = rmq.inf
                 rmq.update(k, rmq.inf)
-            while j < s_len and s[j] == rmq.inf:
-                j += 1
+        while j < s_len and (s[j] == rmq.inf or intervalos[indices_alfabeto[s[j]]].restantes[j] > histograma[s[j]]):
+            j += 1
         r.append(c)
-    while any(histograma.values()) and i < s_len:
-        while i < s_len and s[i] == rmq.inf:
-            i += 1
-        if i < s_len:
-            c = s[i]
-            histograma[c] = max(0, histograma[c] - 1)
-            if not histograma[c]:
-                for k in intervalos[indices_alfabeto[c]].posiciones:
-                    s[k] = rmq.inf
-                    rmq.update(k, rmq.inf)
-            r.append(c)
-        i+=1
         
     return "".join(r)
         
