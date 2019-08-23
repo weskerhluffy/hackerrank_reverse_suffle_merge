@@ -5,7 +5,6 @@ Created on 18 ago 2019
 @author: ernestoalvarado
 '''
 
-
 import math
 import os
 import random
@@ -17,10 +16,11 @@ import collections
 from string import ascii_lowercase
 from sys import maxsize
 from functools import reduce
-from collections import defaultdict
+from collections import defaultdict, Counter
 from _bisect import bisect_left
 from array import array
 from pickletools import string1
+
 
 class RMQ:
 
@@ -50,12 +50,13 @@ class RMQ:
             return min(self.query_help(a, b, 2 * k + 1, l, (l + r) >> 1), self.query_help(a, b, 2 * k + 2, ((l + r) >> 1) + 1, r))
 
 
-# XXX: https://stackoverflow.com/questions/24017363/how-to-test-if-one-string-is-a-subsequence-of-another
+#  XXX: https://stackoverflow.com/questions/24017363/how-to-test-if-one-string-is-a-subsequence-of-another
 def is_subseq(x, y):
     it = iter(y)
     return all(any(c == ch for c in it) for ch in x)
 
-# XXX: https://www.geeksforgeeks.org/given-two-strings-find-first-string-subsequence-second/
+
+#  XXX: https://www.geeksforgeeks.org/given-two-strings-find-first-string-subsequence-second/
 # Returns true if str1[] is a subsequence of str2[]. m is 
 # length of str1 and n is length of str2 
 def isSubSequence(string1, string2, m, n): 
@@ -70,6 +71,7 @@ def isSubSequence(string1, string2, m, n):
     # If last characters are not matching 
     return isSubSequence(string1, string2, m, n - 1) 
 
+
 # Intervalo = collections.namedtuple('Intervalo', 'posiciones indice_posicion_inicial indice_posicion_final')
 class Intervalo:
 
@@ -83,45 +85,60 @@ class Intervalo:
 # Complete the reverseShuffleMerge function below.
 def reverseShuffleMerge(s):
     s = list(reversed(s))
-#    indices_alfabeto = [ord(c) - ord("a") for c in ascii_lowercase]
+    s_len = len(s)
     indices_alfabeto = reduce(lambda a, c:(a.update({c:ord(c) - ord("a")}) or a), ascii_lowercase, defaultdict(lambda:None))
     intervalos = [Intervalo(c, [], maxsize, maxsize) if c in s else None for c in ascii_lowercase]
-    sequencia = array("B", [0] * len(s))
+#    indices_alfabeto = [ord(c) - ord("a") for c in ascii_lowercase]
+    r = []
+    histograma = Counter(s)
+    for c in histograma:
+        histograma[c] >>= 1
+        
+    rmq = RMQ(s_len)
     for i, c in enumerate(s):
         intervalo = intervalos[indices_alfabeto[c]]
         if intervalo:
             intervalo.posiciones.append(i)
-    for c in s:
-        intervalo = intervalos[indices_alfabeto[c]]
-        intervalo.indice_posicion_inicial = 0
-        intervalo.indice_posicion_final = (len(intervalo.posiciones) >> 1) - 1
-    logger.debug("intervalos {}".format(intervalos))
-    for c in ascii_lowercase:
-        intervalo = intervalos[indices_alfabeto[c]]
-        if intervalo:
-            intervalos_menores = intervalos[:indices_alfabeto[c]]
-            try:
-                intervalo_menor_mas_cercano = max(intervalos_menores, key=lambda i:i.posiciones[i.indice_posicion_final] if i else -maxsize)
-            except ValueError as _:
-                intervalo_menor_mas_cercano = None
-            posicion_menor_mas_cercano = None
-            if intervalo_menor_mas_cercano:
-                posicion_menor_mas_cercano = intervalo_menor_mas_cercano.posiciones[intervalo_menor_mas_cercano.indice_posicion_final]
-            else:
-                posicion_menor_mas_cercano = intervalo.posiciones[0] - 1
-            indice_posicion_inicial_nuevo = max(0, bisect_left(intervalo.posiciones, posicion_menor_mas_cercano))
-            corrimiento = min(intervalo.indice_posicion_final + 1, indice_posicion_inicial_nuevo - intervalo.indice_posicion_inicial)
-            intervalo.indice_posicion_inicial += corrimiento
-            intervalo.indice_posicion_final += corrimiento
-    for c in ascii_lowercase:
-        intervalo = intervalos[indices_alfabeto[c]]
-        if not intervalo:
-            continue
-        for i in range(intervalo.indice_posicion_inicial, intervalo.indice_posicion_final + 1):
-            logger.debug("c {} i {}".format(c,i))
-            sequencia[intervalo.posiciones[i]] = ord(c)
-    return "".join(map(chr, filter(lambda c:c, sequencia)))
-
+        rmq.update(i, c)
+    
+    histograma1 = {}
+    i = s_len - 1
+    while i >= 0 and (not histograma1 or not all(map(lambda c:c in histograma1 and histograma1[c] == histograma[c], histograma))):
+        c = s[i]
+        histograma1[c] = min(histograma1.setdefault(c, 0) + 1, histograma[c])
+        i -= 1
+    j = i
+    i = 0
+    while any(histograma.values()) and i < j:
+        c = rmq.query(i, j)
+        while i < s_len and s[i] != c:
+            i += 1
+        i = min(s_len - 1, i + 1)
+#        j = min(s_len - 1, j + 1)
+        histograma[c] = max(0, histograma[c] - 1)
+#        print("i {} j {} c {}". format(i, j, c))
+        if not histograma[c]:
+            for k in intervalos[indices_alfabeto[c]].posiciones:
+                s[k] = rmq.inf
+                rmq.update(k, rmq.inf)
+            while j < s_len and s[j] == rmq.inf:
+                j += 1
+        r.append(c)
+    while any(histograma.values()) and i < s_len:
+        while i < s_len and s[i] == rmq.inf:
+            i += 1
+        if i < s_len:
+            c = s[i]
+            histograma[c] = max(0, histograma[c] - 1)
+            if not histograma[c]:
+                for k in intervalos[indices_alfabeto[c]].posiciones:
+                    s[k] = rmq.inf
+                    rmq.update(k, rmq.inf)
+            r.append(c)
+        i+=1
+        
+    return "".join(r)
+        
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s  %(levelname)-10s %(processName)s [%(filename)s:%(lineno)s - %(funcName)20s() ] %(name)s %(message)s')
